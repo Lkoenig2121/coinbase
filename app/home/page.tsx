@@ -3,10 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  getWallet,
+  getTotalPortfolioValue,
+  initializeWallet,
+  getCryptoHolding,
+} from "@/lib/wallet";
+import TradingPanel from "@/components/TradingPanel";
 
 export default function HomePage() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
+  const [wallet, setWallet] = useState(getWallet());
+  const [totalValue, setTotalValue] = useState(1000);
+  const [cryptoPrices, setCryptoPrices] = useState<{ [key: string]: number }>(
+    {}
+  );
+  const [bitcoinPrice, setBitcoinPrice] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const auth = sessionStorage.getItem("authenticated");
@@ -14,8 +28,60 @@ export default function HomePage() {
       router.push("/");
     } else {
       setAuthenticated(true);
+      initializeWallet();
+      const currentWallet = getWallet();
+      setWallet(currentWallet);
+      fetchCryptoPrices();
     }
   }, [router]);
+
+  const fetchCryptoPrices = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/crypto");
+      if (response.ok) {
+        const data = await response.json();
+        const prices: { [key: string]: number } = {};
+        data.forEach((crypto: any) => {
+          prices[crypto.id] = crypto.current_price;
+          if (crypto.id === "bitcoin") {
+            setBitcoinPrice(crypto.current_price);
+          }
+        });
+        setCryptoPrices(prices);
+        const currentWallet = getWallet();
+        setTotalValue(getTotalPortfolioValue(prices));
+      }
+    } catch (error) {
+      console.error("Error fetching crypto prices:", error);
+    }
+  };
+
+  // Refresh prices and portfolio value every second
+  useEffect(() => {
+    if (authenticated) {
+      // Fetch prices immediately
+      fetchCryptoPrices();
+
+      // Then fetch prices every second
+      const interval = setInterval(() => {
+        fetchCryptoPrices();
+        const currentWallet = getWallet();
+        setWallet(currentWallet);
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [authenticated]);
+
+  // Recalculate total value whenever prices or wallet changes
+  useEffect(() => {
+    if (Object.keys(cryptoPrices).length > 0) {
+      const currentWallet = getWallet();
+      const newTotalValue = getTotalPortfolioValue(cryptoPrices);
+      setTotalValue(newTotalValue);
+      setWallet(currentWallet);
+    }
+  }, [cryptoPrices]);
 
   if (!authenticated) {
     return null;
@@ -168,8 +234,22 @@ export default function HomePage() {
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-4xl font-bold text-gray-900">$0.00</h2>
-                  <p className="text-gray-600 mt-1">$0.00 (0.00%) 1D</p>
+                  <h2 className="text-4xl font-bold text-gray-900">
+                    ${totalValue.toFixed(2)}
+                  </h2>
+                  <p className="text-gray-600 mt-1 flex items-center space-x-2">
+                    <span>
+                      ${(totalValue - 1000).toFixed(2)} (
+                      {totalValue > 0
+                        ? (((totalValue - 1000) / 1000) * 100).toFixed(2)
+                        : "0.00"}
+                      %) 1D
+                    </span>
+                    <span className="text-xs text-green-500 flex items-center">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></span>
+                      Live
+                    </span>
+                  </p>
                 </div>
                 <div className="w-32 h-16 bg-gray-100 rounded"></div>
               </div>
@@ -193,7 +273,12 @@ export default function HomePage() {
                       Crypto
                     </span>
                   </div>
-                  <p className="text-lg font-semibold">$0.00</p>
+                  <p className="text-lg font-semibold">
+                    ${(totalValue - wallet.cash).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Updates every second
+                  </p>
                 </div>
                 <div className="flex-1 p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
@@ -214,7 +299,9 @@ export default function HomePage() {
                       Cash
                     </span>
                   </div>
-                  <p className="text-lg font-semibold">$0.00</p>
+                  <p className="text-lg font-semibold">
+                    ${wallet.cash.toFixed(2)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -326,161 +413,28 @@ export default function HomePage() {
 
           {/* Right Sidebar - Trading Panel */}
           <aside className="lg:col-span-3">
-            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-20">
-              <div className="flex space-x-1 mb-6">
-                <button className="flex-1 py-2 px-3 bg-gray-900 text-white rounded-lg text-sm font-medium">
-                  Buy
-                </button>
-                <button className="flex-1 py-2 px-3 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
-                  Sell
-                </button>
-                <button className="flex-1 py-2 px-3 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
-                  Convert
-                </button>
-              </div>
-
-              <div className="mb-6">
-                <div className="text-3xl font-bold text-gray-400 mb-2">
-                  0 USD
-                </div>
-                <div className="text-sm text-coinbase-blue">0 BTC</div>
-              </div>
-
-              <div className="space-y-4 mb-6">
-                <div className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  <div className="text-sm text-gray-600 mb-1">Pay with</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <svg
-                        className="w-5 h-5 text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium">
-                        Select a payment method
-                      </span>
-                    </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  <div className="text-sm text-gray-600 mb-1">Buy</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">B</span>
-                      </div>
-                      <span className="text-sm font-medium">Bitcoin</span>
-                    </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
+            {bitcoinPrice > 0 ? (
+              <TradingPanel
+                key={refreshKey}
+                cryptoId="bitcoin"
+                cryptoName="Bitcoin"
+                cryptoSymbol="btc"
+                currentPrice={bitcoinPrice}
+                onTransactionComplete={() => {
+                  const currentWallet = getWallet();
+                  setWallet(currentWallet);
+                  setTotalValue(getTotalPortfolioValue(cryptoPrices));
+                  setRefreshKey((prev) => prev + 1);
+                }}
+              />
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-20">
+                <div className="text-center text-gray-500">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-coinbase-blue mx-auto mb-2"></div>
+                  <p className="text-sm">Loading trading panel...</p>
                 </div>
               </div>
-
-              <button className="w-full bg-coinbase-blue text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors mb-6">
-                Continue to payment
-              </button>
-
-              <div className="space-y-3">
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16l-4-4m0 0l4-4m-4 4h18"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Send crypto</span>
-                </button>
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 8l4 4m0 0l-4 4m4-4H3"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Receive crypto</span>
-                </button>
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Deposit cash</span>
-                </button>
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Withdraw cash</span>
-                </button>
-              </div>
-            </div>
+            )}
           </aside>
         </div>
       </div>

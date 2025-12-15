@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import TradingPanel from "@/components/TradingPanel";
+import { getWallet, getCryptoHolding, initializeWallet } from "@/lib/wallet";
 
 interface CryptoDetail {
   id: string;
@@ -37,6 +39,10 @@ export default function CryptoDetailPage() {
     "insights"
   );
   const [timeRange, setTimeRange] = useState("1");
+  const [wallet, setWallet] = useState(getWallet());
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [currentPrice, setCurrentPrice] = useState(0);
+  const [holdingValue, setHoldingValue] = useState(0);
 
   useEffect(() => {
     const auth = sessionStorage.getItem("authenticated");
@@ -44,6 +50,8 @@ export default function CryptoDetailPage() {
       router.push("/");
     } else {
       setAuthenticated(true);
+      initializeWallet();
+      setWallet(getWallet());
       fetchCryptoDetail();
     }
   }, [router, id]);
@@ -53,6 +61,46 @@ export default function CryptoDetailPage() {
       fetchPriceHistory();
     }
   }, [id, timeRange, authenticated]);
+
+  // Update price and holdings value every second
+  useEffect(() => {
+    if (id && authenticated && crypto) {
+      const updatePrice = async () => {
+        try {
+          const response = await fetch(
+            `http://localhost:3001/api/crypto/${id}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            const newPrice = data.current_price || 0;
+            setCurrentPrice(newPrice);
+
+            // Update crypto object with new price
+            if (crypto) {
+              setCrypto({ ...crypto, current_price: newPrice });
+            }
+
+            // Recalculate holding value
+            const holding = getCryptoHolding(id);
+            setHoldingValue(holding * newPrice);
+
+            // Update wallet state
+            setWallet(getWallet());
+          }
+        } catch (error) {
+          console.error("Error fetching updated price:", error);
+        }
+      };
+
+      // Fetch immediately
+      updatePrice();
+
+      // Then update every second
+      const interval = setInterval(updatePrice, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [id, authenticated, crypto]);
 
   const fetchCryptoDetail = async () => {
     try {
@@ -277,9 +325,13 @@ export default function CryptoDetailPage() {
     );
   }
 
+  // Use current price if available, otherwise use crypto price
+  const displayPrice = currentPrice || crypto?.current_price || 0;
+
+  // Calculate price change - use API 24h change data
   const priceChange = crypto?.price_change_24h ?? 0;
   const priceChangePercent = crypto?.price_change_percentage_24h ?? 0;
-  const isPositive = (priceChangePercent ?? 0) >= 0;
+  const isPositive = priceChangePercent >= 0;
 
   return (
     <div className="min-h-screen bg-white">
@@ -409,7 +461,7 @@ export default function CryptoDetailPage() {
             <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
               <div className="flex items-baseline space-x-4 mb-4">
                 <div className="text-4xl font-bold text-gray-900">
-                  {formatPrice(crypto?.current_price)}
+                  {formatPrice(currentPrice || crypto?.current_price || 0)}
                 </div>
                 <div
                   className={`flex items-center space-x-2 text-lg font-semibold ${
@@ -447,7 +499,7 @@ export default function CryptoDetailPage() {
                   )}
                   <span>
                     {formatChange(priceChange)} (
-                    {formatChange(priceChangePercent)}%)
+                    {formatChange(priceChangePercent)}%) 24h
                   </span>
                 </div>
               </div>
@@ -530,14 +582,22 @@ export default function CryptoDetailPage() {
                   Balance
                 </h3>
                 <div className="text-center py-8">
-                  <div className="text-3xl font-bold text-gray-900 mb-2">
-                    $0.00
+                  <div className="text-3xl font-bold text-gray-900 mb-2 flex items-center justify-center space-x-2">
+                    <span>${holdingValue.toFixed(2)}</span>
+                    <span className="text-xs text-green-500 flex items-center">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></span>
+                      Live
+                    </span>
                   </div>
                   <div className="text-gray-600 mb-4">
-                    0 {crypto?.symbol?.toUpperCase() || ""}
+                    {getCryptoHolding(crypto?.id || "").toFixed(6)}{" "}
+                    {crypto?.symbol?.toUpperCase() || ""}
                   </div>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p>Today's returns: $0.00 (0.00%)</p>
+                    <p>
+                      Current price: $
+                      {(currentPrice || crypto?.current_price || 0).toFixed(2)}
+                    </p>
                     <p>All-time returns: $0.00 (0.00%)</p>
                   </div>
                 </div>
@@ -595,160 +655,20 @@ export default function CryptoDetailPage() {
 
           {/* Right Sidebar - Trading Panel */}
           <aside className="lg:col-span-3">
-            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-20">
-              <div className="flex space-x-1 mb-6">
-                <button className="flex-1 py-2 px-3 bg-gray-900 text-white rounded-lg text-sm font-medium">
-                  Buy
-                </button>
-                <button className="flex-1 py-2 px-3 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
-                  Sell
-                </button>
-                <button className="flex-1 py-2 px-3 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
-                  Convert
-                </button>
-              </div>
-
-              <div className="mb-4">
-                <div className="text-xs text-gray-600 mb-1">One-time order</div>
-                <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">One-time order</span>
-                  <svg
-                    className="w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <div className="text-3xl font-bold text-gray-400 mb-2">
-                  0 USD
-                </div>
-                <div className="flex items-center justify-end mb-2">
-                  <button className="text-xs text-coinbase-blue hover:underline">
-                    Max
-                  </button>
-                </div>
-                <div className="text-sm text-coinbase-blue">
-                  0 {crypto?.symbol?.toUpperCase() || ""}
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-6">
-                <div className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  <div className="text-sm text-gray-600 mb-1">Pay with</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <svg
-                        className="w-5 h-5 text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium">
-                        Select a payment method
-                      </span>
-                    </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  <div className="text-sm text-gray-600 mb-1">Buy</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <img
-                        src={crypto?.image || ""}
-                        alt={crypto?.name || ""}
-                        className="w-6 h-6 rounded-full"
-                      />
-                      <span className="text-sm font-medium">
-                        {crypto?.name || ""}
-                      </span>
-                    </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              <button className="w-full bg-coinbase-blue text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors mb-6">
-                Continue to payment
-              </button>
-
-              <div className="space-y-3">
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16l-4-4m0 0l4-4m-4 4h18"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Send crypto</span>
-                </button>
-                <button className="w-full flex items-center space-x-2 p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 8l4 4m0 0l-4 4m4-4H3"
-                    />
-                  </svg>
-                  <span className="text-sm font-medium">Receive crypto</span>
-                </button>
-              </div>
-            </div>
+            {crypto && (
+              <TradingPanel
+                key={refreshKey}
+                cryptoId={crypto.id}
+                cryptoName={crypto.name}
+                cryptoSymbol={crypto.symbol}
+                currentPrice={crypto.current_price}
+                cryptoImage={crypto.image}
+                onTransactionComplete={() => {
+                  setWallet(getWallet());
+                  setRefreshKey((prev) => prev + 1);
+                }}
+              />
+            )}
           </aside>
         </div>
       </div>
