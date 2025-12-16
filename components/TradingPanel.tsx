@@ -17,6 +17,11 @@ interface TradingPanelProps {
   currentPrice: number;
   cryptoImage?: string;
   onTransactionComplete?: () => void;
+  initialMode?: "buy" | "sell" | "convert";
+  onShowNotification?: (
+    message: string,
+    type: "success" | "error" | "info"
+  ) => void;
 }
 
 export default function TradingPanel({
@@ -26,9 +31,11 @@ export default function TradingPanel({
   currentPrice,
   cryptoImage,
   onTransactionComplete,
+  initialMode = "buy",
+  onShowNotification,
 }: TradingPanelProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<"buy" | "sell" | "convert">("buy");
+  const [mode, setMode] = useState<"buy" | "sell" | "convert">(initialMode);
   const [amount, setAmount] = useState("");
   const [wallet, setWallet] = useState(getWallet());
   const [livePrice, setLivePrice] = useState(currentPrice);
@@ -42,6 +49,12 @@ export default function TradingPanel({
     setWallet(currentWallet);
     setLivePrice(currentPrice);
   }, [currentPrice]);
+
+  useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode);
+    }
+  }, [initialMode]);
 
   // Update price every second
   useEffect(() => {
@@ -117,6 +130,10 @@ export default function TradingPanel({
       if (onTransactionComplete) {
         onTransactionComplete();
       }
+      // Show top notification for purchases
+      if (mode === "buy" && onShowNotification) {
+        onShowNotification(result.message, "success");
+      }
       // Clear message after 3 seconds
       setTimeout(() => setMessage(null), 3000);
     } else {
@@ -124,6 +141,9 @@ export default function TradingPanel({
         type: "error",
         text: result.message,
       });
+      if (onShowNotification) {
+        onShowNotification(result.message, "error");
+      }
     }
   };
 

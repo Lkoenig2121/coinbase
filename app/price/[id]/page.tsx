@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import TradingPanel from "@/components/TradingPanel";
+import Notification from "@/components/Notification";
 import { getWallet, getCryptoHolding, initializeWallet } from "@/lib/wallet";
 
 interface CryptoDetail {
@@ -44,6 +45,13 @@ export default function CryptoDetailPage() {
   const [currentPrice, setCurrentPrice] = useState(0);
   const [holdingValue, setHoldingValue] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tradingMode, setTradingMode] = useState<"buy" | "sell" | "convert">(
+    "buy"
+  );
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
 
   useEffect(() => {
     const auth = sessionStorage.getItem("authenticated");
@@ -336,6 +344,13 @@ export default function CryptoDetailPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {notification && (
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+        />
+      )}
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -658,13 +673,33 @@ export default function CryptoDetailPage() {
                     {getCryptoHolding(crypto?.id || "").toFixed(6)}{" "}
                     {crypto?.symbol?.toUpperCase() || ""}
                   </div>
-                  <div className="space-y-2 text-sm text-gray-600">
+                  <div className="space-y-2 text-sm text-gray-600 mb-6">
                     <p>
                       Current price: $
                       {(currentPrice || crypto?.current_price || 0).toFixed(2)}
                     </p>
                     <p>All-time returns: $0.00 (0.00%)</p>
                   </div>
+                  {getCryptoHolding(crypto?.id || "") > 0 && (
+                    <button
+                      onClick={() => {
+                        setTradingMode("sell");
+                        // Scroll to trading panel
+                        setTimeout(() => {
+                          const tradingPanel = document.querySelector(
+                            "[data-trading-panel]"
+                          );
+                          tradingPanel?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          });
+                        }, 100);
+                      }}
+                      className="w-full bg-red-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                    >
+                      Sell {crypto?.symbol?.toUpperCase() || ""}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -721,18 +756,25 @@ export default function CryptoDetailPage() {
           {/* Right Sidebar - Trading Panel */}
           <aside className="lg:col-span-3">
             {crypto && (
-              <TradingPanel
-                key={refreshKey}
-                cryptoId={crypto.id}
-                cryptoName={crypto.name}
-                cryptoSymbol={crypto.symbol}
-                currentPrice={crypto.current_price}
-                cryptoImage={crypto.image}
-                onTransactionComplete={() => {
-                  setWallet(getWallet());
-                  setRefreshKey((prev) => prev + 1);
-                }}
-              />
+              <div data-trading-panel>
+                <TradingPanel
+                  key={`${refreshKey}-${tradingMode}`}
+                  cryptoId={crypto.id}
+                  cryptoName={crypto.name}
+                  cryptoSymbol={crypto.symbol}
+                  currentPrice={crypto.current_price}
+                  cryptoImage={crypto.image}
+                  initialMode={tradingMode}
+                  onTransactionComplete={() => {
+                    setWallet(getWallet());
+                    setRefreshKey((prev) => prev + 1);
+                    setTradingMode("buy"); // Reset to buy mode after transaction
+                  }}
+                  onShowNotification={(message, type) => {
+                    setNotification({ message, type });
+                  }}
+                />
+              </div>
             )}
           </aside>
         </div>

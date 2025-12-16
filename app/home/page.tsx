@@ -8,8 +8,10 @@ import {
   getTotalPortfolioValue,
   initializeWallet,
   getCryptoHolding,
+  sellCrypto,
 } from "@/lib/wallet";
 import TradingPanel from "@/components/TradingPanel";
+import Notification from "@/components/Notification";
 
 export default function HomePage() {
   const router = useRouter();
@@ -23,6 +25,20 @@ export default function HomePage() {
   const [bitcoinPrice, setBitcoinPrice] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
+  const [sellModal, setSellModal] = useState<{
+    open: boolean;
+    cryptoId: string;
+    cryptoName: string;
+    cryptoSymbol: string;
+    amount: number;
+    price: number;
+  } | null>(null);
+  const [sellAmount, setSellAmount] = useState("");
+  const [sellMode, setSellMode] = useState<"usd" | "crypto">("usd");
 
   useEffect(() => {
     const auth = sessionStorage.getItem("authenticated");
@@ -92,6 +108,13 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {notification && (
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+        />
+      )}
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -393,12 +416,14 @@ export default function HomePage() {
                       const isPositive = priceChange >= 0;
 
                       return (
-                        <Link
+                        <div
                           key={cryptoId}
-                          href={`/price/${cryptoId}`}
                           className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                         >
-                          <div className="flex items-center space-x-4 flex-1">
+                          <Link
+                            href={`/price/${cryptoId}`}
+                            className="flex items-center space-x-4 flex-1"
+                          >
                             {crypto?.image ? (
                               <img
                                 src={crypto.image}
@@ -440,19 +465,41 @@ export default function HomePage() {
                                 )}
                               </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                              <span>${value.toFixed(2)}</span>
-                              <span className="text-xs text-green-500 flex items-center">
-                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                              </span>
+                          </Link>
+                          <div className="flex items-center space-x-3">
+                            <div className="text-right">
+                              <div className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                                <span>${value.toFixed(2)}</span>
+                                <span className="text-xs text-green-500 flex items-center">
+                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                ${price.toFixed(2)}
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-500">
-                              ${price.toFixed(2)}
-                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSellModal({
+                                  open: true,
+                                  cryptoId,
+                                  cryptoName:
+                                    crypto?.name || cryptoId.toUpperCase(),
+                                  cryptoSymbol: crypto?.symbol || "",
+                                  amount,
+                                  price,
+                                });
+                                setSellAmount("");
+                                setSellMode("usd");
+                              }}
+                              className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors text-sm whitespace-nowrap"
+                            >
+                              Sell
+                            </button>
                           </div>
-                        </Link>
+                        </div>
                       );
                     })}
                 </div>
@@ -609,6 +656,9 @@ export default function HomePage() {
                   setTotalValue(getTotalPortfolioValue(cryptoPrices));
                   setRefreshKey((prev) => prev + 1);
                 }}
+                onShowNotification={(message, type) => {
+                  setNotification({ message, type });
+                }}
               />
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-20">
@@ -621,6 +671,209 @@ export default function HomePage() {
           </aside>
         </div>
       </div>
+
+      {/* Sell Modal */}
+      {sellModal && sellModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-gray-900">
+                Sell {sellModal.cryptoSymbol.toUpperCase()}
+              </h3>
+              <button
+                onClick={() => {
+                  setSellModal(null);
+                  setSellAmount("");
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex space-x-2 mb-4">
+                <button
+                  onClick={() => {
+                    setSellMode("usd");
+                    setSellAmount("");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    sellMode === "usd"
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  USD
+                </button>
+                <button
+                  onClick={() => {
+                    setSellMode("crypto");
+                    setSellAmount("");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    sellMode === "crypto"
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {sellModal.cryptoSymbol.toUpperCase()}
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount to sell (
+                  {sellMode === "usd"
+                    ? "USD"
+                    : sellModal.cryptoSymbol.toUpperCase()}
+                  )
+                </label>
+                <input
+                  type="text"
+                  value={sellAmount}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const regex = /^\d*\.?\d*$/;
+                    if (regex.test(value) || value === "") {
+                      setSellAmount(value);
+                    }
+                  }}
+                  placeholder="0"
+                  className="w-full text-2xl font-bold text-gray-900 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-coinbase-blue"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm text-gray-500">
+                    {sellMode === "usd"
+                      ? `≈ ${
+                          sellAmount && parseFloat(sellAmount) > 0
+                            ? (
+                                parseFloat(sellAmount) / sellModal.price
+                              ).toFixed(6)
+                            : "0.000000"
+                        } ${sellModal.cryptoSymbol.toUpperCase()}`
+                      : `≈ $${
+                          sellAmount && parseFloat(sellAmount) > 0
+                            ? (
+                                parseFloat(sellAmount) * sellModal.price
+                              ).toFixed(2)
+                            : "0.00"
+                        }`}
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (sellMode === "usd") {
+                        setSellAmount(
+                          (sellModal.amount * sellModal.price).toFixed(2)
+                        );
+                      } else {
+                        setSellAmount(sellModal.amount.toFixed(6));
+                      }
+                    }}
+                    className="text-xs text-coinbase-blue hover:underline"
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Available:</span>
+                  <span className="font-medium text-gray-900">
+                    {sellMode === "usd"
+                      ? `$${(sellModal.amount * sellModal.price).toFixed(2)}`
+                      : `${sellModal.amount.toFixed(
+                          6
+                        )} ${sellModal.cryptoSymbol.toUpperCase()}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Price:</span>
+                  <span className="font-medium text-gray-900">
+                    ${sellModal.price.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setSellModal(null);
+                  setSellAmount("");
+                }}
+                className="flex-1 py-3 px-4 border border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const amountNum = parseFloat(sellAmount);
+                  if (!sellAmount || isNaN(amountNum) || amountNum <= 0) {
+                    alert("Please enter a valid amount");
+                    return;
+                  }
+
+                  let sellValueUSD: number;
+                  if (sellMode === "usd") {
+                    sellValueUSD = amountNum;
+                  } else {
+                    sellValueUSD = amountNum * sellModal.price;
+                  }
+
+                  // Check if selling more than available
+                  const maxSellUSD = sellModal.amount * sellModal.price;
+                  if (sellValueUSD > maxSellUSD) {
+                    alert(
+                      `Cannot sell more than $${maxSellUSD.toFixed(2)} worth`
+                    );
+                    return;
+                  }
+
+                  const result = sellCrypto(
+                    sellModal.cryptoId,
+                    sellValueUSD,
+                    sellModal.price
+                  );
+                  if (result.success) {
+                    const currentWallet = getWallet();
+                    setWallet(currentWallet);
+                    setTotalValue(getTotalPortfolioValue(cryptoPrices));
+                    setNotification({
+                      message: result.message,
+                      type: "success",
+                    });
+                    setSellModal(null);
+                    setSellAmount("");
+                  } else {
+                    setNotification({
+                      message: result.message,
+                      type: "error",
+                    });
+                  }
+                }}
+                disabled={!sellAmount || parseFloat(sellAmount) <= 0}
+                className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Sell {sellModal.cryptoSymbol.toUpperCase()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
