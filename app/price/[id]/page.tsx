@@ -43,6 +43,7 @@ export default function CryptoDetailPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [holdingValue, setHoldingValue] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const auth = sessionStorage.getItem("authenticated");
@@ -336,10 +337,10 @@ export default function CryptoDetailPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white sticky top-0 z-10">
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 md:space-x-4">
               <button
                 onClick={() => router.back()}
                 className="p-2 text-gray-600 hover:text-gray-900"
@@ -356,6 +357,35 @@ export default function CryptoDetailPage() {
                     strokeWidth={2}
                     d="M15 19l-7-7 7-7"
                   />
+                </svg>
+              </button>
+              {/* Hamburger Menu Button - Mobile Only */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 text-gray-600 hover:text-gray-900"
+                aria-label="Toggle menu"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  {mobileMenuOpen ? (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  ) : (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
+                  )}
                 </svg>
               </button>
               <div className="w-10 h-10 bg-coinbase-blue rounded-full flex items-center justify-center">
@@ -383,7 +413,7 @@ export default function CryptoDetailPage() {
               </nav>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-600 hover:text-gray-900">
+              <button className="hidden md:block p-2 text-gray-600 hover:text-gray-900">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -398,7 +428,7 @@ export default function CryptoDetailPage() {
                   />
                 </svg>
               </button>
-              <button className="p-2 text-gray-600 hover:text-gray-900">
+              <button className="hidden md:block p-2 text-gray-600 hover:text-gray-900">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -413,7 +443,7 @@ export default function CryptoDetailPage() {
                   />
                 </svg>
               </button>
-              <button className="p-2 text-gray-600 hover:text-gray-900 relative">
+              <button className="hidden md:block p-2 text-gray-600 hover:text-gray-900 relative">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -437,6 +467,41 @@ export default function CryptoDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu Overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            ></div>
+            <div className="absolute top-16 left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-40 md:hidden">
+              <nav className="flex flex-col py-4">
+                <Link
+                  href="/home"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-coinbase-blue font-medium transition-colors"
+                >
+                  Home
+                </Link>
+                <Link
+                  href="/trade"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-coinbase-blue font-medium transition-colors"
+                >
+                  Trade
+                </Link>
+                <Link
+                  href="/profile"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-coinbase-blue font-medium transition-colors"
+                >
+                  Profile
+                </Link>
+              </nav>
+            </div>
+          </>
+        )}
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
